@@ -9,7 +9,7 @@ https://github.com/aliclark/phasm-scratch/blob/master/elf.psm
 
 Or just read a copy of program.psm that I pasted earlier:
 
-```
+```python
 #!/usr/bin/env phasm
 
 std = Import("std")
