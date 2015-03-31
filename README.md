@@ -76,6 +76,6 @@ elf.linux(rodata, data, text)
 ```
 
 This is an exceedingly early release, so likely contains bugs, could
-delete your harddrive, etc. etc.
+delete your hard-drive, etc. etc.
 
 Hope you like it, any patches are very welcome!
