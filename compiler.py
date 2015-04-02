@@ -3,9 +3,12 @@
 import os
 import re
 import sys
+import errno
 import importlib
 import cStringIO
 import tokenize
+
+import requests
 
 from common import *
 
@@ -429,12 +432,40 @@ def special_Import(env, offset, fx):
         raise Exception("Import takes String as argument")
     f = fx['data']
 
-    # FIXME: toctou
-    if os.path.exists(f + '.psm'):
-        source = open(f + '.psm', 'r').read()
+    ghstr = 'gh:'
+    if not f.startswith(ghstr):
+        raise Exception('Only gh: Import is understood at the moment')
+
+    # FIXME: validation, maybe?
+    f = f[len(ghstr):]
+    cachedir  = os.path.expanduser("~/.cache/phasm/")
+    cachef    = cachedir + f
+    cachefdir = os.path.dirname(cachef)
+
+    if not os.path.exists(cachef):
+        try:
+            os.makedirs(cachefdir, 0700)
+        except OSError as exc:
+            if exc.errno == errno.EEXIST and os.path.isdir(cachefdir):
+                pass
+            else:
+                raise
+        # FIXME: use trust store with just the Github cert
+        r = requests.get('https://raw.githubusercontent.com/' + f)
+        # TODO: allow sha256 pinning
+        # TODO: allow PGP sig requirement for 'gh:user/*'
+        with open(cachef, 'w') as outf:
+            outf.write(r.content)
+
+    # mmmh, code from the internet
+    if cachef.endswith('.psm'):
+        source = open(cachef, 'r').read()
         return build_expression('{'+source+'}', offset)
-    elif os.path.exists(f + '.py'):
-        mod = importlib.import_module(f)
+    elif cachef.endswith('.py'):
+        fbname = os.path.basename(cachef)
+        sys.path.append(cachefdir)
+        mod = importlib.import_module(fbname[:-3])
+        sys.path.remove(cachefdir)
         return mod.build()
 
     raise Exception("Unknown module: " + fx[1])
