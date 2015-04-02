@@ -85,7 +85,7 @@ text = (rodata, data) -> {
 elf.linux(rodata, data, text)
 ```
 
-To make it go, first do something like:
+To make it go:
 
 ```sh
 # WARNING: I take no responsibility for any harm caused to your
