@@ -49,15 +49,15 @@ To make it go:
 ######### Run at your own risk. #########
 
 # check out the stuff
-mkdir $HOME/projects
+mkdir -p $HOME/projects
 cd $HOME/projects
 git clone https://github.com/aliclark/phasm.git
 cd -
 
 # add phasm.sh to PATH as "phasm"
-mkdir $HOME/bin
+mkdir -p $HOME/bin
 export PATH="$PATH:$HOME/bin"
-ln -s $HOME/projects/phasm/phasm.sh $HOME/bin/phasm
+ln -sf $HOME/projects/phasm/phasm.sh $HOME/bin/phasm
 
 # download the code from the internet and run it
 phasm gh:aliclark/phasm-scratch/master/hello.psm
