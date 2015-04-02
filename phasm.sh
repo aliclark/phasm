@@ -8,6 +8,8 @@ curdir="$(dirname "$(readlink -f "$0")")"
 exe=$(mktemp)
 
 if [[ $script_name == "gh:"* ]]; then
+    # XXX: we *could* chmod +x the resulting script, since we know it should be
+    # executable.
     echo "Import(\"$script_name\")" | $curdir/compiler.py >$exe
 else
     $curdir/compiler.py <$script_name >$exe
