@@ -5,84 +5,45 @@ thoroughly incomplete, but might be useful at some point.
 A very basic example program and how to run it:
 
 ```python
-#!/usr/bin/env phasm
+(std, asm, elf, sys, util) -> {
 
-std = Import("gh:aliclark/phasm-scratch/master/std.py")
-asm = Import("gh:aliclark/phasm-scratch/master/asm_x64.py")
+    rodata = {
+        lalala      = util.utf8("lalala\n")
+        hello_world = util.utf8("Hello, world!\n")
+        hiya        = util.utf8("hiya\n")
 
-abstract_elf  = Import("gh:aliclark/phasm-scratch/master/elf.psm")
-abstract_sys  = Import("gh:aliclark/phasm-scratch/master/linux-syscall-x64.psm")
-abstract_do   = Import("gh:aliclark/phasm-scratch/master/do.psm")
-abstract_util = Import("gh:aliclark/phasm-scratch/master/util.psm")
+        :lalala_addr:      lalala
+        :hello_world_addr: hello_world
+        :hiya_addr:        hiya
+    }
 
-elf  = abstract_elf(std)
-sys  = abstract_sys(std, asm)
-do   = abstract_do(asm)
-util = abstract_util(std, sys)
+    data = {
+        :counter: std.U(8, 0)
+        :space:   std.Bin(8, "00 00 00 00 00 00 00 00")
+    }
 
-U = std.U
-Bin = std.Bin
+    text = (rodata, data) -> {
 
-rodata = {
-    :somestring:  util.utf8("lalala\n\0")
-    :hello_world: util.utf8("Hello, world!\n\0")
-    :somestring2: util.utf8("hiya\n\0")
+        # TODO: seccomp2 ourselves down to just sys_write and sys_exit
+
+        util.loop(3, {
+            sys.write(sys.fd_stdout, rodata.hiya_addr, rodata.hiya.len)
+        })
+
+        util.loop(2, {
+            sys.write(sys.fd_stdout, rodata.lalala_addr, rodata.lalala.len)
+        })
+
+        sys.exit(43)
+
+        # signal to the user that this process should be terminated, if
+        # not already done so
+        :terminated:
+        asm.jmp_1b(terminated)
+    }
+
+    elf.linux(rodata, data, text)
 }
-
-data = {
-    :counter: U(8, 0)
-    :space:   Bin(8, "00 00 00 00 00 00 00 00")
-}
-
-jge_1b = (to) -> {
-    asm.jge_1b(from, to)
-    :from:
-}
-jmp_1b = (to) -> {
-    asm.jmp_1b(from, to)
-    :from:
-}
-
-# n can be up to 256
-loop = (n, code) -> {
-    asm.mov_eax(U(4, 0))
-
-    :loop:
-    asm.cmp_eax_1b(n)
-    jge_1b(end)
-
-    asm.push_rax()
-
-    code()
-
-    asm.pop_rax()
-    asm.add_eax_1b(1)
-    jmp_1b(loop)
-
-    :end:
-}
-
-text = (rodata, data) -> {
-
-    # TODO: seccomp2 ourselves down to just sys_write and sys_exit
-
-    loop(3, {
-        sys.write(sys.fd_stdout, rodata.somestring2, 5)
-    })
-
-    loop(2, {
-        sys.write(sys.fd_stdout, rodata.somestring, 7)
-    })
-
-    sys.exit(43)
-
-    # signal to the user that this process should be terminated, if
-    # not already done so
-    :terminated:
-    jmp_1b(terminated)
-}
-
-elf.linux(rodata, data, text)
 ```
 
 To make it go:
@@ -104,7 +65,7 @@ export PATH="$PATH:$HOME/bin"
 ln -s $HOME/projects/phasm/phasm.sh $HOME/bin/phasm
 
 # download the code from the internet and run it
-phasm gh:aliclark/phasm-scratch/master/program.psm
+phasm gh:aliclark/phasm-scratch/master/hello.psm
 ```
 
 This is an exceedingly early release, so likely contains bugs, could
