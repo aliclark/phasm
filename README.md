@@ -4,7 +4,7 @@ thoroughly incomplete, but might be useful at some point.
 
 A very basic example program and how to run it:
 
-```python
+```ruby
 (std, asm, elf, sys, util) -> {
 
     rodata = {
