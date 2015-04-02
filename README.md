@@ -50,7 +50,7 @@ To make it go:
 
 # check out the stuff
 mkdir $HOME/projects
-cd projects
+cd $HOME/projects
 git clone https://github.com/aliclark/phasm.git
 cd -
 
