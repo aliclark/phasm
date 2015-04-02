@@ -101,7 +101,7 @@ cd -
 # add phasm.sh to PATH as "phasm"
 mkdir $HOME/bin
 export PATH="$PATH:$HOME/bin"
-ln -s /home/user/phasm/phasm.sh phasm
+ln -s $HOME/projects/phasm/phasm.sh $HOME/bin/phasm
 
 # download the code from the internet and run it
 phasm gh:aliclark/phasm-scratch/master/program.psm
