@@ -434,7 +434,7 @@ def special_Import(env, offset, fx):
 
     ghstr = 'gh:'
     if not f.startswith(ghstr):
-        raise Exception('Only gh: Import is understood at the moment')
+        raise Exception('Only "gh" Import is understood at the moment, not: ' + f)
 
     # FIXME: validation, maybe?
     f = f[len(ghstr):]
