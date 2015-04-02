@@ -438,7 +438,7 @@ def special_Import(env, offset, fx):
 
     # FIXME: validation, maybe?
     f = f[len(ghstr):]
-    cachedir  = os.path.expanduser("~/.cache/phasm/")
+    cachedir  = os.path.expanduser("~/.cache/phasm/gh/")
     cachef    = cachedir + f
     cachefdir = os.path.dirname(cachef)
 
