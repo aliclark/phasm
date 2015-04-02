@@ -8,33 +8,28 @@ A very basic example program and how to run it:
 (std, asm, elf, sys, util) -> {
 
     rodata = {
-        lalala      = util.utf8("lalala\n")
         hello_world = util.utf8("Hello, world!\n")
-        hiya        = util.utf8("hiya\n")
+        bye         = util.utf8("bye!\n")
 
-        :lalala_addr:      lalala
         :hello_world_addr: hello_world
-        :hiya_addr:        hiya
+        :bye_addr:         bye
     }
 
     data = {
         :counter: std.U(8, 0)
-        :space:   std.Bin(8, "00 00 00 00 00 00 00 00")
     }
 
     text = (rodata, data) -> {
 
         # TODO: seccomp2 ourselves down to just sys_write and sys_exit
 
-        util.loop(3, {
-            sys.write(sys.fd_stdout, rodata.hiya_addr, rodata.hiya.len)
-        })
+        util.print(rodata.hello_world_addr, rodata.hello_world.len)
 
         util.loop(2, {
-            sys.write(sys.fd_stdout, rodata.lalala_addr, rodata.lalala.len)
+            util.print(rodata.bye_addr, rodata.bye.len)
         })
 
-        sys.exit(43)
+        sys.exit(42)
 
         # signal to the user that this process should be terminated, if
         # not already done so
@@ -67,6 +62,23 @@ ln -s $HOME/projects/phasm/phasm.sh $HOME/bin/phasm
 # download the code from the internet and run it
 phasm gh:aliclark/phasm-scratch/master/hello.psm
 ```
+
+Currently, this compiles and runs a binary of just 222 bytes:
+
+00000000  7f 45 4c 46 02 01 01 03  00 00 00 00 00 00 00 00  |.ELF............|
+00000010  02 00 3e 00 01 00 00 00  78 80 04 08 00 00 00 00  |..>.....x.......|
+00000020  40 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |@...............|
+00000030  00 00 00 00 40 00 38 00  01 00 00 00 00 00 00 00  |....@.8.........|
+00000040  01 00 00 00 05 00 00 00  00 00 00 00 00 00 00 00  |................|
+00000050  00 80 04 08 00 00 00 00  00 80 04 08 00 00 00 00  |................|
+00000060  de 00 00 00 00 00 00 00  de 00 00 00 00 00 00 00  |................|
+00000070  00 10 00 00 00 00 00 00  bb 01 00 00 00 b9 c3 80  |................|
+00000080  04 08 ba 0e 00 00 00 b8  04 00 00 00 cd 80 b8 00  |................|
+00000090  00 00 00 83 f8 02 7d 1d  50 bb 01 00 00 00 b9 d1  |......}.P.......|
+000000a0  80 04 08 ba 05 00 00 00  b8 04 00 00 00 cd 80 58  |...............X|
+000000b0  83 c0 01 eb de bb 2a 00  00 00 b8 01 00 00 00 cd  |......*.........|
+000000c0  80 eb fe 48 65 6c 6c 6f  2c 20 77 6f 72 6c 64 21  |...Hello, world!|
+000000d0  0a 62 79 65 21 0a 00 00  00 00 00 00 00 00        |.bye!.........|
 
 This is an exceedingly early release, so likely contains bugs, could
 delete your hard-drive, etc. etc.
