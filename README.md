@@ -65,6 +65,7 @@ phasm gh:aliclark/phasm-scratch/master/hello.psm
 
 Currently, this compiles and runs a binary of just 222 bytes:
 
+```
 00000000  7f 45 4c 46 02 01 01 03  00 00 00 00 00 00 00 00  |.ELF............|
 00000010  02 00 3e 00 01 00 00 00  78 80 04 08 00 00 00 00  |..>.....x.......|
 00000020  40 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |@...............|
@@ -79,6 +80,7 @@ Currently, this compiles and runs a binary of just 222 bytes:
 000000b0  83 c0 01 eb de bb 2a 00  00 00 b8 01 00 00 00 cd  |......*.........|
 000000c0  80 eb fe 48 65 6c 6c 6f  2c 20 77 6f 72 6c 64 21  |...Hello, world!|
 000000d0  0a 62 79 65 21 0a 00 00  00 00 00 00 00 00        |.bye!.........|
+```
 
 This is an exceedingly early release, so likely contains bugs, could
 delete your hard-drive, etc. etc.
