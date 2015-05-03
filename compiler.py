@@ -7,10 +7,17 @@ import errno
 import importlib
 import cStringIO
 import tokenize
+import string
 
 import requests
 
 from common import *
+
+
+
+# FIXME: cannot always do "x = block.x" because block.x is not
+# closed-over(!)
+
 
 def log(*xs):
     sys.stderr.write(' '.join([str(x) for x in xs]) + '\n')
@@ -427,6 +434,8 @@ def ast(tokens):
     return expression
 
 
+import_overlays = {}
+
 def special_Import(env, offset, fx):
     if fx['type'] != E_STRING:
         raise Exception("Import takes String as argument")
@@ -436,26 +445,37 @@ def special_Import(env, offset, fx):
     if not f.startswith(ghstr):
         raise Exception('Only "gh" Import is understood at the moment, not: ' + f)
 
-    # FIXME: validation, maybe?
-    f = f[len(ghstr):]
-    cachedir  = os.path.expanduser("~/.cache/phasm/gh/")
-    cachef    = cachedir + f
-    cachefdir = os.path.dirname(cachef)
+    if any([f.startswith(o) for o in import_overlays]):
+        best = sorted([{'len':len(o), 'src':o, 'dst':import_overlays[o]}
+                       for o in import_overlays if f.startswith(o)],
+                      key=lambda x: x['len'], reverse=True)[0]
+        cachef    = f.replace(best['src'], best['dst'])
+        cachefdir = os.path.dirname(cachef)
 
-    if not os.path.exists(cachef):
-        try:
-            os.makedirs(cachefdir, 0700)
-        except OSError as exc:
-            if exc.errno == errno.EEXIST and os.path.isdir(cachefdir):
-                pass
-            else:
-                raise
-        # FIXME: use trust store with just the Github cert
-        r = requests.get('https://raw.githubusercontent.com/' + f)
-        # TODO: allow sha256 pinning
-        # TODO: allow PGP sig requirement for 'gh:user/*'
-        with open(cachef, 'w') as outf:
-            outf.write(r.content)
+        #print cachef
+
+    else:
+        # FIXME: validation, maybe?
+        f = f[len(ghstr):]
+        cachef    = os.path.expanduser("~/.cache/phasm/gh/") + f
+        cachefdir = os.path.dirname(cachef)
+
+        if not os.path.exists(cachef):
+            try:
+                os.makedirs(cachefdir, 0700)
+            except OSError as exc:
+                if exc.errno == errno.EEXIST and os.path.isdir(cachefdir):
+                    pass
+                else:
+                    raise
+            # FIXME: use trust store with just the Github cert
+            r = requests.get('https://raw.githubusercontent.com/' + f)
+            if r.status_code != 200:
+                raise Exception("got status " + str(r.status_code) + " for: " + f)
+            # TODO: allow sha256 pinning
+            # TODO: allow PGP sig requirement for 'gh:user/*'
+            with open(cachef, 'w') as outf:
+                outf.write(r.content)
 
     # mmmh, code from the internet
     if cachef.endswith('.psm'):
@@ -506,6 +526,9 @@ def env_lookup(v, env):
     for scope in env:
         if v in scope:
             return scope[v]
+
+    print print_env(env)
+
     raise Exception("Undefined env variable " + v)
 
 def block_lookup(v, block):
@@ -521,11 +544,6 @@ def block_lookup(v, block):
 
     raise Exception("Undefined block variable " + v)
 
-def eval_varref(ex, env, offset):
-    if var['type'] != E_VARREF:
-        raise Exception("Error this is not a var: " + str(var))
-    return lookup(ex, env)
-
 def eval_varref(var, env, offset):
     if var['type'] != E_VARREF:
         raise Exception("Attempt to lookup non var: " + str(var))
@@ -534,6 +552,10 @@ def eval_varref(var, env, offset):
     ex = env_lookup(bits[0], env)
 
     for b in bits[1:]:
+        # re-eval may be needed
+        if ex['type'] != E_OFFSET_REF:
+            ex = eval_transparent(ex, env, offset)
+
         if not ex['final']:
             rv = e_varref(var['data'])
             rv['final'] = ex['final']
@@ -541,6 +563,10 @@ def eval_varref(var, env, offset):
             return rv
 
         ex = block_lookup(b, ex)
+
+    # re-eval may be needed
+    if ex['type'] != E_OFFSET_REF:
+        ex = eval_transparent(ex, env, offset)
 
     if not ex['final']:
         rv = e_varref(var['data'])
@@ -551,7 +577,7 @@ def eval_varref(var, env, offset):
     return ex
 
 def eval_application_builtin(ex, env, offset):
-    func = eval_varref(ex['data']['f'], env, offset)
+    func = eval_varref(ex['data']['f'], env, None)
     if func['type'] != E_BUILTIN_FUNC:
         raise Exception("Error this is not a builtin: " + str(ex['data']['f']))
     params_num = func['data']['paramsnum']
@@ -571,7 +597,7 @@ def eval_application_builtin(ex, env, offset):
     else:
         args = []
         for v in ex['data']['args']:
-            arg = eval_transparent(v, env, offset)
+            arg = eval_transparent(v, env, None)
             # none of the builtins take blocks... atm.
             while arg['type'] == E_BLOCK:
                 arg = arg['data']['val']
@@ -592,7 +618,8 @@ def eval_application_builtin(ex, env, offset):
     return rv
 
 def eval_application_lambda(ex, env, offset):
-    func = eval_varref(ex['data']['f'], env, offset)
+    #print 'ENTER ' + str(ex['data']['f'])
+    func = eval_varref(ex['data']['f'], env, None)
     if func['type'] != E_LAMBDA:
         raise Exception("Error this is not a lambda: " + str(ex['data']['f']))
     params = func['data']['params']
@@ -603,9 +630,10 @@ def eval_application_lambda(ex, env, offset):
                         " arg(s) to " + ex['data']['f']['data'] + " but that takes " + str(params_num))
     strictvs = {}
     for k, v in zip(params, ex['data']['args']):
-        strictvs[k] = eval_transparent(v, env, offset)
+        strictvs[k] = eval_transparent(v, env, None)
 
     # Note the use of the lambdas env as a base
+    #print 'FENV: ' + print_env(func['data']['env'])
     funcenv = [strictvs] + func['data']['env']
     rv = eval_transparent(func['data']['body'], funcenv, offset)
 
@@ -616,10 +644,12 @@ def eval_application_lambda(ex, env, offset):
         reex['len'] = rv['len']
         return reex
 
+    #print 'LEAVE ' + str(ex['data']['f'])
+
     return rv
 
 def eval_application(ex, env, offset):
-    func = eval_varref(ex['data']['f'], env, offset)
+    func = eval_varref(ex['data']['f'], env, None)
     if func['type'] == E_BUILTIN_FUNC:
         return eval_application_builtin(ex, env, offset)
     if func['type'] == E_LAMBDA:
@@ -633,7 +663,14 @@ def eval_bin_concat(ex, env, offset):
 
     out = []
     for x in rv['data']:
+        # by the time we lookup the variable here it already refers to
+        # something that is completely evaluated with labels included.
+
+        # If we have a position then we consider this to be placement
+        # in the final binary.
+        # This mechanism 
         v = eval_transparent(x, env, pos)
+
         if v['final'] and v['type'] not in (E_BLOCK, E_BIN_CONCAT, E_BIN_RAW,
                                             E_OFFSET_LABEL):
             raise Exception("bin concat has non bin at top level " +  str(v))
@@ -664,16 +701,57 @@ def eval_bin_concat(ex, env, offset):
 #
 # For now I'll just use a naive ordering of assignments, but in future
 # it should allow for re-ordering to find dependencies.
+#OLD^
+
+
+
+# It would be super nice to build a DAG of these dependencies and then
+# plod through evaluating one-by-one.
+
+# Outcomes:
+#if offset == None:
+#  then evaluate what we can of the variables and value, but don't put
+#  up a fuss if some is unknown (just leave it be).
+#else:
+#  we *must* evaluate the whole thing, and be giving our children
+#  placements. All variables referencing the labels will have correct
+#  values filled in.
+#
+# Where it gets a bit interesting is with content referring to
+# variables and variables referring to labels, which seems to imply a
+# sort of re-evaluation as bits of information slowly becomes
+# available.
+#
+
+
+# A) Build a DAG of the value dependencies (vars depend on context
+# vars, other vars in the same scope, and label values; label values
+# depend on the offset being known and the lengths of any preceeding
+# binary content.
+#
+# A.1) If offset is known, just proceed linearly - the should all be
+# evaluable and in this order.
+#
+# A.2) If offset is not known, proceed across all values attempting to
+# evaluate them, and just leaving the original expression if it has a
+# dependency on a label value.
+
+
+# TODO. For now just require the programmer to get the order right.
+#
+# From a list of assignments of Key,Value (including any labels, with
+# either known or unknown values), for each key determine the other
+# Keys referenced in the value.
+
+# At the end we start with every KV that depends on no other
+# Variables, then build a sort of tree to the larger values.
+
+
 def eval_block(ex, env, offset):
 
     rv = e_block(ex['data']['vars'][:],
                  ex['data']['val'].copy(),
                  ex['data']['labels'].copy())
-
-    if offset is None:
-        # there isn't much point working on the block until we're in a
-        # position to fill in our labels offsets, one by one
-        return rv
 
     # If we have binary content, our goal is to determine the values
     # for the labels within that content from, one-by-one.
@@ -697,7 +775,8 @@ def eval_block(ex, env, offset):
         # evaluate variables as best we can, given the placeholder labels
         outvars = []
         for (k, v) in rv['data']['vars']:
-            vars_context[k] = eval_transparent(v, env, offset)
+            # variables are not evaluated with any position
+            vars_context[k] = eval_transparent(v, env, None)
             outvars.append((k, vars_context[k]))
         # fill in our new knowledge
         rv['data']['vars'] = outvars
@@ -710,12 +789,15 @@ def eval_block(ex, env, offset):
         rv['final'] = block_value['final'] and all([v['final'] for (k, v) in outvars])
         rv['len']   = block_value['len']
 
-        if rv['data']['val']['type'] == E_BIN_CONCAT:
+        #print 'offset: ' + str(offset)
+
+        if (offset is not None) and (rv['data']['val']['type'] == E_BIN_CONCAT):
             sum_len = offset
 
             # if we learned any label values, feed it in and go again
             for part in block_value['data']:
                 if part['len'] is None:
+                    print 'STOPPED: ' + print_nicely(0, ex, False)
                     break
 
                 if part['type'] == E_OFFSET_LABEL:
@@ -737,10 +819,10 @@ def eval_block(ex, env, offset):
     # own offset is known, because we may still depend on other
     # variables that are non-final and waiting on our own length to
     # become final.
-    if rv['len'] is None:
+    if (offset is not None) and (rv['len'] is None):
         raise Exception("Our length is still unknown: "+str(rv))
 
-    # set any offsets so others can use them
+    # set any known offsets so others can use them
     for k in labels_context:
         rv['data']['labels'][k] = labels_context[k]
 
@@ -759,7 +841,8 @@ def eval_transparent(ex, environment, offset):
     if ex['type'] == E_BIN_CONCAT:
         return eval_bin_concat(ex, environment, offset)
     if ex['type'] == E_LAMBDA:
-        ex['data']['env'] = environment
+        if ex['data']['env'] is None:
+            ex['data']['env'] = environment
         return ex
 
     if ex['type'] == E_OFFSET_REF:
@@ -779,6 +862,58 @@ def eval_transparent(ex, environment, offset):
         return ex
 
     raise Exception("Unrecognized expression: " + str(ex))
+
+
+"""
+Ok, lets rethink this eval_transparent thing.
+
+How evaluation proceeds.
+
+1) If flattened, each binary block could be viewed as a sequence of
+labels with known-length stretches in-between, relative to the nearest
+containing WithPosition.
+
+...<-ignore->...
+WithPosition(X, { A :l1: { B :l2: C } :l2: D })
+...<-ignore->...
+
+2) Upon knowing both the preceding binary length to a label *and* the
+position argument to the closest WithPosition, that label value can
+become calculated.
+
+x = WithPosition(X, Y)
+z = WithPosition(Z, x) <- has no effect: x === z
+
+3) In this way, a :label: value is always bound in definition to
+exactly one position, even if that position's value is not known yet.
+
+Note though, an expression x = {...}; can be contained in y =
+WithPosition(Y,x); and z = WithPosition(Z,x); These are completely
+different instantiations of 'x' from the original one, which is bound
+to the parent WithPosition(s) for the block it was defined in.
+
+4) Anything depending on these label values will by extension be
+depending on the dependencies, the position and before content.
+
+5) We do this *lazily*, with our goal always being the top-level
+binary result.
+
+
+1) Give all expressions their environment context that tells them the
+variables they can "see". For functions this is especially important,
+but also for any expression definitions in a block. (btw, disallow
+shadowing for clarity)
+
+2)
+
+"""
+
+# Key insight: All items that get placed into a bound bin-cat will
+# themselves be bound to that offset of the bin-cat, and this never
+# changes.
+
+# For now I think it's sufficient to just continue left-to-right and
+# stop on first sight of trouble.
 
 
 def build_expression(source, offset):
@@ -870,7 +1005,7 @@ def print_env(env):
 
 def block_binary_only(x):
     if not x['final']:
-        raise Exception("tried to extract binary from non-final block: " +str(x))
+        raise Exception("tried to extract binary from non-final block: " +str(print_nicely(0, x, False)))
     while x['type'] == E_BLOCK:
         x = x['data']['val']
     parts = []
@@ -878,11 +1013,22 @@ def block_binary_only(x):
         for p in x['data']:
             parts.append(block_binary_only(p))
         x['data'] = parts
-    return getbin(x)
+    try:
+        return getbin(x)
+    except ValueError:
+        raise Exception("Could not extract binary from: " +str(print_nicely(0, x, False)))
 
 if '__main__' == __name__:
-    x = build_expression('WithPosition(0, {'+sys.stdin.read()+'})', None)
+    if len(sys.argv) > 1:
+        maps = sys.argv[1]
+        with open(maps, 'r') as mapsf:
+            for line in mapsf:
+                if not line.startswith('overlay '):
+                    continue
+                (ol, src, dst) = map(string.strip, line.split(' '))
+                import_overlays[src] = dst
 
+    x = build_expression('WithPosition(0, {'+sys.stdin.read()+'})', None)
     x = block_binary_only(x)
-    for b in x['data']:
-        sys.stdout.write(chr(b))
+    outbin = ''.join(map(chr, x['data']))
+    sys.stdout.write(outbin)

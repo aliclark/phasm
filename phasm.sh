@@ -7,6 +7,8 @@ script_name=$1
 curdir="$(dirname "$(readlink -f "$0")")"
 exe=$(mktemp)
 
+#TODO: file: urls
+
 if [[ $script_name == "gh:"* ]]; then
     # XXX: we *could* chmod +x the resulting script, since we know it should be
     # executable.

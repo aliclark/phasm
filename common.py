@@ -41,12 +41,15 @@ def getbin(sx):
     if sx['type'] == E_OFFSET_LABEL:
         return e_bin_raw(0, [])
 
-    raise Exception("Tried to get binary from " + str(sx))
+    raise ValueError("Tried to get binary from " + str(sx))
 
 
 # final: whether this is in its final form
 # len:   the length of binary content, or None if n/a / unknown
 
+# An easy way to tell the caller we need to be reconstructed (instead
+# of having to reconstruct ourselves). This concept is possibly a bad
+# idea.
 def e_needs_work(length=None):
     return {'len': length, 'final': False, 'type':E_NEEDS_WORK, 'data': None}
 
