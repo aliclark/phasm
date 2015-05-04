@@ -1,24 +1,32 @@
 #!/bin/bash
 
-# TODO: just do this in python and things will be easier..
+# phasm.sh filename
+#
+# Fetch, compile and run the source code as a binary.
+#
+# This script can be used as a hash-bang interpreter.
+#
+# Any github files fetched will be cached for future under
+# ~/cache/phasm/gh.
 
-script_name=$1
+# TODO: allow an imports overlay map to be specified
 
-curdir="$(dirname "$(readlink -f "$0")")"
-exe=$(mktemp)
+# TODO: cache output by a) the input source, b) all Imports, taking
+# into account overlays.
+#
+# TODO: add -f flag to ignore binary cache, in case dependencies
+# changed
 
-#TODO: file: urls
+phasmc_dir="$(dirname "$(readlink -f "$0")")"
 
-if [[ $script_name == "gh:"* ]]; then
-    # XXX: we *could* chmod +x the resulting script, since we know it should be
-    # executable.
-    echo "Import(\"$script_name\")" | $curdir/compiler.py >$exe
-else
-    $curdir/compiler.py <$script_name >$exe
-fi
-chmod +x $exe
-$exe
+input=$1
+output=$(mktemp)
+
+$phasmc_dir/phasmc.py <$input >$output
+chmod +x $output
+
+$output "$@"
 status=$?
 
-rm $exe
+rm $output
 exit $status

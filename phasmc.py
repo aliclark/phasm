@@ -13,6 +13,24 @@ import requests
 
 from common import *
 
+# phasmc.py <STDIN >STDOUT
+#
+# stdin is the source of a phasm program, which may refer to github
+# "gh:" imports.
+#
+# stdout is the binary output generated from this, which obviously
+# would need saving and setting of the executable bit before being
+# able to run as a program.
+#
+# Any github files fetched will be cached like
+# ~/.cache/phasm/gh/username/project/v0.1/src/file.psm and used
+# locally thereafter, with the responsibility of the program to only
+# import immutable tag content.
+#
+# If this is not desirable, either provide "overlay" mappings, telling
+# the compiler to use a local filesystem directory instead of a gh
+# location, or simply delete the cached files that may have changed
+# since.
 
 
 # FIXME: cannot always do "x = block.x" because block.x is not
@@ -488,7 +506,7 @@ def special_Import(env, offset, fx):
         sys.path.remove(cachefdir)
         return mod.build()
 
-    raise Exception("Unknown module: " + fx[1])
+    raise Exception("Unknown module: " + cachef)
 
 # Philosophically the outer program looks like WithPosition(0,
 # "{"+source+"}"), so closer bound WithPosition takes precedent.
