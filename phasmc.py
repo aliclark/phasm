@@ -495,6 +495,8 @@ def special_Import(env, offset, fx):
             with open(cachef, 'w') as outf:
                 outf.write(r.content)
 
+    log(cachef)
+
     # mmmh, code from the internet
     if cachef.endswith('.psm'):
         source = open(cachef, 'r').read()
@@ -545,7 +547,7 @@ def env_lookup(v, env):
         if v in scope:
             return scope[v]
 
-    print print_env(env)
+    #print print_env(env)
 
     raise Exception("Undefined env variable " + v)
 
@@ -563,6 +565,7 @@ def block_lookup(v, block):
     raise Exception("Undefined block variable " + v)
 
 def eval_varref(var, env, offset):
+    #log('var', var)
     if var['type'] != E_VARREF:
         raise Exception("Attempt to lookup non var: " + str(var))
     v = var['data']
@@ -570,9 +573,11 @@ def eval_varref(var, env, offset):
     ex = env_lookup(bits[0], env)
 
     for b in bits[1:]:
+        #log('b', b)
+
         # re-eval may be needed
-        if ex['type'] != E_OFFSET_REF:
-            ex = eval_transparent(ex, env, offset)
+        #if ex['type'] != E_OFFSET_REF:
+        #    ex = eval_transparent(ex, env, offset)
 
         if not ex['final']:
             rv = e_varref(var['data'])
@@ -583,8 +588,8 @@ def eval_varref(var, env, offset):
         ex = block_lookup(b, ex)
 
     # re-eval may be needed
-    if ex['type'] != E_OFFSET_REF:
-        ex = eval_transparent(ex, env, offset)
+    #if ex['type'] != E_OFFSET_REF:
+    #    ex = eval_transparent(ex, env, offset)
 
     if not ex['final']:
         rv = e_varref(var['data'])
@@ -595,6 +600,8 @@ def eval_varref(var, env, offset):
     return ex
 
 def eval_application_builtin(ex, env, offset):
+    #log('ENTER_B', ex['data']['f'], offset)
+
     func = eval_varref(ex['data']['f'], env, None)
     if func['type'] != E_BUILTIN_FUNC:
         raise Exception("Error this is not a builtin: " + str(ex['data']['f']))
@@ -631,12 +638,17 @@ def eval_application_builtin(ex, env, offset):
         reex = e_application(ex['data']['f'], ex['data']['args'])
         reex['final'] = False
         reex['len'] = rv['len']
+
+        #log('SAME_b', ex['data']['f'], rv['len'])
         return reex
+
+    #log('LEAVE_B', ex['data']['f'])
 
     return rv
 
 def eval_application_lambda(ex, env, offset):
-    #print 'ENTER ' + str(ex['data']['f'])
+    #log('ENTER', ex['data']['f'], offset)
+
     func = eval_varref(ex['data']['f'], env, None)
     if func['type'] != E_LAMBDA:
         raise Exception("Error this is not a lambda: " + str(ex['data']['f']))
@@ -647,8 +659,10 @@ def eval_application_lambda(ex, env, offset):
         raise Exception("Tried to apply " + str(args_num) +
                         " arg(s) to " + ex['data']['f']['data'] + " but that takes " + str(params_num))
     strictvs = {}
+    #log('ARGS')
     for k, v in zip(params, ex['data']['args']):
         strictvs[k] = eval_transparent(v, env, None)
+    #log('ARGS DONE')
 
     # Note the use of the lambdas env as a base
     #print 'FENV: ' + print_env(func['data']['env'])
@@ -660,9 +674,12 @@ def eval_application_lambda(ex, env, offset):
         reex = e_application(ex['data']['f'], ex['data']['args'])
         reex['final'] = False
         reex['len'] = rv['len']
+
+        #log('SAME', ex['data']['f'], rv['len'])
+
         return reex
 
-    #print 'LEAVE ' + str(ex['data']['f'])
+    #log('LEAVE', ex['data']['f'], rv['final'], rv['len'])
 
     return rv
 
@@ -687,6 +704,7 @@ def eval_bin_concat(ex, env, offset):
         # If we have a position then we consider this to be placement
         # in the final binary.
         # This mechanism 
+
         v = eval_transparent(x, env, pos)
 
         if v['final'] and v['type'] not in (E_BLOCK, E_BIN_CONCAT, E_BIN_RAW,
@@ -765,8 +783,34 @@ def eval_bin_concat(ex, env, offset):
 # Variables, then build a sort of tree to the larger values.
 
 
+
+"""
+Both of these samples have circular dependencies, with the rodata offset depending on the size
+of the text() call's output, and the text() call taking the placed binary as an argument.
+
+This is supposedly resolvable by first calculating the size of
+"text()", irrespective of the actual values it holds, and then feeding
+that in to find the rodata offset value.
+
+
+        repositioned_rodata = WithPosition(Add(mem_offset, rodata_offset), rodata)
+        :text_offset:
+        WithPosition(Add(mem_offset, text_offset),
+                     text(repositioned_rodata, repositioned_data))
+        :rodata_offset:
+        rodata()
+
+
+        text(placed_rodata, placed_data, placed_bss)
+        :placed_rodata: = rodata()
+"""
+
+# XXX: Need a chance to calculate values of all labels referenced.
 def eval_block(ex, env, offset):
 
+    # Being a copy is important, because blocks' label values and some
+    # resultant variable values will change depending on where the
+    # block is placed.
     rv = e_block(ex['data']['vars'][:],
                  ex['data']['val'].copy(),
                  ex['data']['labels'].copy())
@@ -785,21 +829,40 @@ def eval_block(ex, env, offset):
                     raise Exception("duplicate definition of label " + a['data'])
                 labels_context[a['data']] = e_offset_ref(a['data'])
 
-    known_labels = []
-    while True:
-        known_labels_prev = known_labels
-        known_labels = []
+    # We want to keep tabs on two things: a) which labels have their
+    # length known yet, b) which bin items are placed finally.  As
+    # long as these progress, we keep re-evaluating across the length
+    # of the block, since any new information might be useful to
+    # another.
 
-        # evaluate variables as best we can, given the placeholder labels
+    # A score might be comprised of the sum of final vars, sum of vars
+    # lengths, sum of binitem finals and sum of binitem lengths
+
+    score = -1
+
+    while True:
+        prevscore = score
+        score = 0
+
+        # evaluate variables as best we can, given the placeholder
+        # labels that are being updated (if the offset is known).
         outvars = []
         for (k, v) in rv['data']['vars']:
             # variables are not evaluated with any position
             vars_context[k] = eval_transparent(v, env, None)
             outvars.append((k, vars_context[k]))
+
+            if vars_context[k]['final']:
+                score += 1
+            if vars_context[k]['len'] is not None:
+                score += 1
+
         # fill in our new knowledge
         rv['data']['vars'] = outvars
+        
 
         # evaluate the block value as best we can
+        #log('eval_bin', offset)
         block_value = eval_transparent(rv['data']['val'], env, offset)
 
         # fill in our new knowledge
@@ -809,36 +872,46 @@ def eval_block(ex, env, offset):
 
         #print 'offset: ' + str(offset)
 
-        if (offset is not None) and (rv['data']['val']['type'] == E_BIN_CONCAT):
+        if rv['data']['val']['type'] == E_BIN_CONCAT:
             sum_len = offset
 
             # if we learned any label values, feed it in and go again
             for part in block_value['data']:
+                if part['final']:
+                    score += 1
+                if part['len'] is not None:
+                    score += 1
+
                 if part['len'] is None:
-                    print 'STOPPED: ' + print_nicely(0, ex, False)
-                    break
+                    sum_len = None
+
+                if sum_len is None:
+                    continue
 
                 if part['type'] == E_OFFSET_LABEL:
                     labels_context[part['data']] = e_integer(sum_len)
-                    known_labels.append(part['data'])
 
                 sum_len += part['len']
-            else:
-                # we've calculated all the labels
-                if len(known_labels) == len(known_labels_prev):
-                    break
 
-            continue
+        else:
+            if rv['final']:
+                score += 1
+            if rv['len'] is not None:
+                score += 1
 
-        # if we made it here then it looks like we have everything
-        break
+        if score == prevscore:
+            # no progress made since last time
+            break
 
     # It's actually fine to not fully evaluate a block even when our
     # own offset is known, because we may still depend on other
     # variables that are non-final and waiting on our own length to
-    # become final.
+    # become final, but given an offset we'd be expected to know our
+    # length.
+    #
+    # XXX: In fact, is it ever acceptable not to know our length here?
     if (offset is not None) and (rv['len'] is None):
-        raise Exception("Our length is still unknown: "+str(rv))
+        raise Exception("Our length is still unknown: "+str(print_nicely(0, rv, False)))
 
     # set any known offsets so others can use them
     for k in labels_context:
@@ -846,16 +919,22 @@ def eval_block(ex, env, offset):
 
     return rv
 
+
 def eval_transparent(ex, environment, offset):
     if ex['type'] == E_BLOCK:
         return eval_block(ex, environment, offset)
     if ex['type'] == E_APPLICATION:
         return eval_application(ex, environment, offset)
+
     if ex['type'] == E_VARREF:
         rv = eval_varref(ex, environment, offset)
+
+        if rv['type'] == E_LAMBDA and len(rv['data']['params']) == 0:
+            return eval_application(e_application(ex, []), environment, offset)
         if rv['type'] == E_BUILTIN_FUNC and rv['data']['paramsnum'] == 0:
             return eval_application(e_application(ex, []), environment, offset)
         return rv
+
     if ex['type'] == E_BIN_CONCAT:
         return eval_bin_concat(ex, environment, offset)
     if ex['type'] == E_LAMBDA:
@@ -878,9 +957,6 @@ def eval_transparent(ex, environment, offset):
         return ex
     if ex['type'] == E_BUILTIN_FUNC:
         return ex
-
-    raise Exception("Unrecognized expression: " + str(ex))
-
 
 """
 Ok, lets rethink this eval_transparent thing.
