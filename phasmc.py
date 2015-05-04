@@ -495,7 +495,7 @@ def special_Import(env, offset, fx):
             with open(cachef, 'w') as outf:
                 outf.write(r.content)
 
-    log(cachef)
+    #log(cachef)
 
     # mmmh, code from the internet
     if cachef.endswith('.psm'):
@@ -565,12 +565,16 @@ def block_lookup(v, block):
     raise Exception("Undefined block variable " + v)
 
 def eval_varref(var, env, offset):
-    #log('var', var)
     if var['type'] != E_VARREF:
         raise Exception("Attempt to lookup non var: " + str(var))
     v = var['data']
     bits = v.split('.')
     ex = env_lookup(bits[0], env)
+
+    if offset is not None and v == 'code':
+        #log('### code ###')
+        #log(print_nicely(0, ex, False))
+        pass
 
     for b in bits[1:]:
         #log('b', b)
@@ -578,6 +582,13 @@ def eval_varref(var, env, offset):
         # re-eval may be needed
         #if ex['type'] != E_OFFSET_REF:
         #    ex = eval_transparent(ex, env, offset)
+
+        if offset is not None and not ex['final']:
+            ex = eval_transparent(ex, env, offset)
+            if offset is not None and v == 'code':
+                #log('### code re-eval ###')
+                #log(print_nicely(0, ex, False))
+                pass
 
         if not ex['final']:
             rv = e_varref(var['data'])
@@ -590,6 +601,13 @@ def eval_varref(var, env, offset):
     # re-eval may be needed
     #if ex['type'] != E_OFFSET_REF:
     #    ex = eval_transparent(ex, env, offset)
+
+    if offset is not None and not ex['final']:
+        ex = eval_transparent(ex, env, offset)
+        if offset is not None and v == 'code':
+            #log('### code re-eval ###')
+            #log(print_nicely(0, ex, False))
+            pass
 
     if not ex['final']:
         rv = e_varref(var['data'])
@@ -635,7 +653,7 @@ def eval_application_builtin(ex, env, offset):
 
     if not rv['final']:
         # return a copy of the original thing.
-        reex = e_application(ex['data']['f'], ex['data']['args'])
+        reex = e_application(ex['data']['f'], ex['data']['args'], env=env)
         reex['final'] = False
         reex['len'] = rv['len']
 
@@ -670,8 +688,8 @@ def eval_application_lambda(ex, env, offset):
     rv = eval_transparent(func['data']['body'], funcenv, offset)
 
     if not rv['final']:
-        # return a copy of the original thing.
-        reex = e_application(ex['data']['f'], ex['data']['args'])
+        # return a copy of the original thing. we also close over the environment
+        reex = e_application(ex['data']['f'], ex['data']['args'], env=env)
         reex['final'] = False
         reex['len'] = rv['len']
 
@@ -684,6 +702,11 @@ def eval_application_lambda(ex, env, offset):
     return rv
 
 def eval_application(ex, env, offset):
+    # 'saved' applications will want to use the environment they are
+    # defined in, sort of like a closure.
+    if ex['data']['env']:
+       env = ex['data']['env']
+
     func = eval_varref(ex['data']['f'], env, None)
     if func['type'] == E_BUILTIN_FUNC:
         return eval_application_builtin(ex, env, offset)
@@ -706,14 +729,20 @@ def eval_bin_concat(ex, env, offset):
         # This mechanism 
 
         v = eval_transparent(x, env, pos)
+        if x['type'] == E_VARREF and x['data'] == 'code':
+            #log('==CODE==', pos)
+            #log(print_nicely(0,v,False))
+            pass
 
         if v['final'] and v['type'] not in (E_BLOCK, E_BIN_CONCAT, E_BIN_RAW,
                                             E_OFFSET_LABEL):
             raise Exception("bin concat has non bin at top level " +  str(v))
+
         if pos is not None and v['len'] is not None:
             pos += v['len']
         else:
             pos = None
+
         out.append(v)
 
     # fill in our new knowledge
@@ -721,6 +750,11 @@ def eval_bin_concat(ex, env, offset):
     rv['final'] = all([v['final'] for v in rv['data']])
     lens = [v['len'] for v in rv['data']]
     rv['len']   = sum(lens) if None not in lens else None
+
+    for v in rv['data']:
+        if not v['final']:
+            #log(v)
+            pass
 
     # could do label stripping once the block has that info?
     if all([x['type'] == E_BIN_RAW for x in rv['data']]):
@@ -861,6 +895,11 @@ def eval_block(ex, env, offset):
         rv['data']['vars'] = outvars
         
 
+        #log('########################################')
+        #log(print_nicely(0, rv['data']['val'], True)[:200])
+        #log('########################################')
+
+
         # evaluate the block value as best we can
         #log('eval_bin', offset)
         block_value = eval_transparent(rv['data']['val'], env, offset)
@@ -869,6 +908,12 @@ def eval_block(ex, env, offset):
         rv['data']['val'] = block_value
         rv['final'] = block_value['final'] and all([v['final'] for (k, v) in outvars])
         rv['len']   = block_value['len']
+
+        if block_value['final'] and not all([v['final'] for (k, v) in outvars]):
+            log('VALUE FINAL BUT VARS NOT:')
+            log('################')
+            log(str(outvars))
+            log('################')
 
         #print 'offset: ' + str(offset)
 
@@ -912,6 +957,13 @@ def eval_block(ex, env, offset):
     # XXX: In fact, is it ever acceptable not to know our length here?
     if (offset is not None) and (rv['len'] is None):
         raise Exception("Our length is still unknown: "+str(print_nicely(0, rv, False)))
+
+    if offset is not None and not rv['final']:
+        #log('STILL NON FINAL:')
+        #log('################')
+        #log(print_nicely(0, rv['data']['val'], False))
+        #log('################')
+        pass
 
     # set any known offsets so others can use them
     for k in labels_context:

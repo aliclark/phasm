@@ -90,10 +90,10 @@ def e_block(assignments, value, labels=None):
     return {'len': value['len'], 'final': value['final'], 'type':E_BLOCK,
             'data': {'vars':assignments, 'val':value, 'labels':labels}}
 
-def e_application(f, args):
+def e_application(f, args, env=None):
     if f['type'] != E_VARREF:
         raise Exception("Application can only be performed on named functions")
-    return {'len': None, 'final': False, 'type':E_APPLICATION, 'data': {'f': f, 'args': args}}
+    return {'len': None, 'final': False, 'type':E_APPLICATION, 'data': {'f': f, 'args': args, 'env':env}}
 
 def e_lambda(params, body, env=None):
     return {'len': None, 'final': True, 'type':E_LAMBDA, 'data': {'params':params, 'body':body, 'env':env}}
