@@ -9,10 +9,16 @@
 # Any github files fetched will be cached for future under
 # ~/cache/phasm/gh.
 
-# TODO: allow an imports overlay map to be specified
+# TODO: give maps a proper parameter like '-m mapsfile'
+#
+# phasm.sh [-m mapsfile] [--] filename
 
-# TODO: cache output by a) the input source, b) all Imports, taking
-# into account overlays.
+# TODO: allow -s for 'script'
+#
+# phasm.sh [-m mapsfile] ([-c 'some script'] | [--] filename)
+
+# TODO: cache output by both the input source and all Imports
+# contained within, taking into account overlays.
 #
 # TODO: add -f flag to ignore binary cache, in case dependencies
 # changed

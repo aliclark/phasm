@@ -30,6 +30,8 @@ import requests
 # the compiler to use a local filesystem directory instead of a gh
 # location, or simply delete the cached files that may have changed
 # since.
+#
+# TODO: give maps a proper parameter like '-m mapsfile'
 
 
 # FIXME: cannot always do "x = block.x" because block.x is not
