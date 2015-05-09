@@ -81,7 +81,7 @@ ln -sf $HOME/projects/phasm/phasm.sh $HOME/bin/phasm
 
 # download the code from the internet and run it.
 # the first run will take some time to fetch
-phasm <(echo 'Import("gh:aliclark/phasm-hello/0.3/hello-linux-x64.psm")')
+phasm <(echo 'Import("gh:aliclark/phasm-hello/0.1/hello-linux-x64.psm")')
 ```
 
 This compiles and runs a 202 byte ELF binary:
