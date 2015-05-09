@@ -37,17 +37,17 @@ And [hello-linux-x64.psm](https://github.com/aliclark/phasm-hello/blob/master/he
 ```ruby
 #!/usr/bin/env phasm
 
-num = Import("gh:aliclark/phasm-std/0.3/num.py")
-str = Import("gh:aliclark/phasm-std/0.3/str.py")
+num      = Import("gh:aliclark/phasm-std/0.3/num.py")
+str      = Import("gh:aliclark/phasm-std/0.3/str.py")
 bin_base = Import("gh:aliclark/phasm-std/0.3/bin.py")
 asm_base = Import("gh:aliclark/phasm-std/0.3/asm_x64.py")
 
-abs_bin   = Import("gh:aliclark/phasm-std/0.3/bin.psm")
-abs_asm   = Import("gh:aliclark/phasm-std/0.3/asm-x64.psm")
-abs_elf   = Import("gh:aliclark/phasm-std/0.3/elf.psm")
-abs_proc  = Import("gh:aliclark/phasm-std/0.3/proc-x64.psm")
-abs_sys   = Import("gh:aliclark/phasm-std/0.3/syscall-linux-x64.psm")
-abs_util  = Import("gh:aliclark/phasm-std/0.3/util.psm")
+abs_bin  = Import("gh:aliclark/phasm-std/0.3/bin.psm")
+abs_asm  = Import("gh:aliclark/phasm-std/0.3/asm-x64.psm")
+abs_elf  = Import("gh:aliclark/phasm-std/0.3/elf.psm")
+abs_proc = Import("gh:aliclark/phasm-std/0.3/proc-x64.psm")
+abs_sys  = Import("gh:aliclark/phasm-std/0.3/syscall-linux-x64.psm")
+abs_util = Import("gh:aliclark/phasm-std/0.3/util.psm")
 
 abs_hello = Import("gh:aliclark/phasm-hello/0.1/hello.psm")
 
