@@ -670,7 +670,7 @@ def block_lookup(v, block):
     if block['type'] != E_BLOCK:
         if not block['final']:
             return e_needs_work(block['len'])
-        raise Exception("Attempt to lookup " + v + " on non block: " + str(block))
+        raise Exception("Attempt to lookup " + v + " on non block: " + print_nicely(0, block, False))
     for (k, x) in block['data']['vars']:
         if v == k:
             return x
