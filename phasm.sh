@@ -2,7 +2,7 @@
 
 # phasm.sh filename
 #
-# Fetch, compile and run the source code as a binary.
+# Compile and run the source code as a binary.
 #
 # This script can be used as a hash-bang interpreter.
 #
@@ -13,12 +13,11 @@
 #
 # phasm.sh [-m mapsfile] [--] filename
 
-# TODO: allow -s for 'script'
-#
-# phasm.sh [-m mapsfile] ([-c 'some script'] | [--] filename)
-
 # TODO: cache output by both the input source and all Imports
 # contained within, taking into account overlays.
+#
+# If it weren't for overlay maps the hash of the original file would be
+# sufficient
 #
 # TODO: add -f flag to ignore binary cache, in case dependencies
 # changed
@@ -31,8 +30,10 @@ output=$(mktemp)
 $phasmc_dir/phasmc.py <$input >$output
 chmod +x $output
 
+# FIXME: splice off the "phasm" part at $0
 $output "$@"
 status=$?
 
+# TODO: put this in a trap
 rm $output
 exit $status
