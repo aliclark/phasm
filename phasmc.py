@@ -1024,11 +1024,11 @@ def eval_block(ex, env, offset):
         rv['final'] = block_value['final'] and all([v['final'] for (k, v) in outvars])
         rv['len']   = block_value['len']
 
-        if block_value['final'] and not all([v['final'] for (k, v) in outvars]):
-            log('VALUE FINAL BUT VARS NOT:')
-            log('################')
-            log(str(outvars))
-            log('################')
+        #if block_value['final'] and not all([v['final'] for (k, v) in outvars]):
+        #    log('VALUE FINAL BUT VARS NOT:')
+        #    log('################')
+        #    log(str(outvars))
+        #    log('################')
 
         #print 'offset: ' + str(offset)
 
